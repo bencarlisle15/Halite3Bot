@@ -9,7 +9,6 @@ public class Game {
 	public final ArrayList<Player> players = new ArrayList<>();
 	public final Player me;
 	public final GameMap gameMap;
-	public final SortedArrayList<PriorityMapCell> priorityMap;
 
 	public Game() {
 		Constants.populateConstants(Input.readLine());
@@ -25,7 +24,6 @@ public class Game {
 		}
 		me = players.get(myId.id);
 		gameMap = GameMap._generate();
-		priorityMap = new SortedArrayList<PriorityMapCell>();
 	}
 
 	public void ready(final String name) {

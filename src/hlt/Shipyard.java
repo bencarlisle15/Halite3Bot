@@ -1,6 +1,6 @@
 package hlt;
 
-public class Shipyard extends Entity {
+public class Shipyard extends Entity implements DropPoint {
 	public Shipyard(final PlayerId owner, final Position position) {
 		super(owner, EntityId.NONE, position);
 	}

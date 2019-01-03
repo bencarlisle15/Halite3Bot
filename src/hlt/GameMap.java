@@ -9,6 +9,7 @@ public class GameMap {
 	public final int height;
 	public final MapCell[][] cells;
 	public final static int stopEating = 30;
+	public final static int numberOfClusters = 4;
 
 	public GameMap(final int width, final int height) {
 		this.width = width;
@@ -86,7 +87,7 @@ public class GameMap {
 
 		return Direction.STILL;
 	}
-	public Direction navigate(final Ship ship, final Position destination, HashMap<Ship, Position> nextPositions, Collection<Ship> collection) {
+	public Direction navigate(final Ship ship, final Position destination, HashMap<Ship, Position> nextPositions, Collection<Ship> collection, Player me, ArrayList<Player> players) {
 		Direction direction;
 		if (ship.position.x == destination.x) {
 			if (isSouthOf(ship, destination)) {
@@ -102,26 +103,25 @@ public class GameMap {
 			direction = Direction.EAST;
 		}
 		Position nextPosition = getPositionFromDirection(ship.position, direction);
-		if (isFutureCrash(ship, nextPositions, nextPosition, collection)) {
-			Log.log("ISCRASH");
+		if (isFutureCrash(ship, nextPositions, nextPosition, collection, me, players)) {
 			if (direction == Direction.STILL) {
-				direction = findSafeDirection(ship, nextPositions, collection);
+				direction = findSafeDirection(ship, nextPositions, collection, me, players);
 			} else if (direction == Direction.EAST || direction == Direction.WEST) {
 				if (isSouthOf(ship, destination)) {
 					direction = Direction.NORTH;
 				} else {
 					direction = Direction.SOUTH;
 				}
-				if (isFutureCrash(ship, nextPositions, getPositionFromDirection(ship.position, direction), collection)) {
-					direction = findSafeDirection(ship, nextPositions, collection);
+				if (isFutureCrash(ship, nextPositions, getPositionFromDirection(ship.position, direction), collection, me, players)) {
+					direction = findSafeDirection(ship, nextPositions, collection, me, players);
 				}
 			} else {
-				if (!isFutureCrash(ship, nextPositions, getPositionFromDirection(ship.position, Direction.WEST), collection)) {
+				if (!isFutureCrash(ship, nextPositions, getPositionFromDirection(ship.position, Direction.WEST), collection, me, players)) {
 					direction = Direction.WEST;
-				} else if (!isFutureCrash(ship, nextPositions, getPositionFromDirection(ship.position, Direction.EAST), collection)) {
+				} else if (!isFutureCrash(ship, nextPositions, getPositionFromDirection(ship.position, Direction.EAST), collection, me, players)) {
 					direction = Direction.EAST;
 				} else {
-					direction = findSafeDirection(ship, nextPositions, collection);
+					direction = findSafeDirection(ship, nextPositions, collection, me, players);
 				}
 			}
 		}
@@ -132,16 +132,25 @@ public class GameMap {
 		return ship.position.y > destination.y && ship.position.y - destination.y < (this.height + 1 + destination.y - ship.position.y) || ship.position.y < destination.y && destination.y - ship.position.y > (this.height + 1 + ship.position.y - destination.y);
 	}
 	
-	private Direction findSafeDirection(Ship ship, HashMap<Ship, Position> nextPositions, Collection<Ship> allShips) {
+	private Direction findSafeDirection(Ship ship, HashMap<Ship, Position> nextPositions, Collection<Ship> allShips, Player me, ArrayList<Player> players) {
 		for (Direction direction : Direction.ALL_CARDINALS) {
-			if (direction != Direction.STILL && !isFutureCrash(ship, nextPositions, getPositionFromDirection(ship.position, direction), allShips)) {
+			if (direction != Direction.STILL && !isFutureCrash(ship, nextPositions, getPositionFromDirection(ship.position, direction), allShips, me, players)) {
 				return direction;
 			}
 		}
 		return Direction.STILL;
 	}
 	
-	private boolean isFutureCrash(Ship ship, HashMap<Ship, Position> nextPositions, Position nextPosition, Collection<Ship> allShips) {
+	private boolean isFutureCrash(Ship ship, HashMap<Ship, Position> nextPositions, Position nextPosition, Collection<Ship> allShips, Player me, ArrayList<Player> players) {
+		for (Player player: players) {
+			if (!player.equals(me)) {
+				for (Ship s: player.ships.values()) {
+					if (calculateDistance(nextPosition, s.position) <= 2) {
+						return true;
+					}
+				}
+			}
+		}
 		for (Ship s: allShips) {
 			if (!ship.equals(s) && s.position.equals(nextPosition)) {
 				return true;
@@ -187,21 +196,6 @@ public class GameMap {
 		return map;
 	}
 
-	public SortedArrayList<Cluster> updateClusters(Player me) {
-		SortedArrayList<MapCell> cells = new SortedArrayList<MapCell>();
-		for (int i = 0; i < width; i++) {
-			for (int j = 0; j < height; j++) {
-				cells.insertSorted(at(new Position(i, j)));
-			}
-		}
-		SortedArrayList<Cluster> clusters = new SortedArrayList<Cluster>();
-		for (int i = 0; i < 10; i++) {
-			Position position = cells.get(i).position;
-			clusters.insertSorted(new Cluster(position, me.shipyard.position, this));
-		}
-		return clusters;
-	}
-
 	public Position getPositionFromDirection(Position position, Direction direction) {
 		switch (direction) {
 		case EAST:
@@ -218,5 +212,43 @@ public class GameMap {
 			return this.normalize(position);
 
 		}
+	}
+
+	public Position nearestDropPoint(Player me, Position position) {
+		int minDistance = calculateDistance(position, me.shipyard.position);
+		Position minPosition = me.shipyard.position;
+		for (Dropoff dropoff: me.dropoffs.values()) {
+			int distance = calculateDistance(position, dropoff.position);
+			if (distance < minDistance) {
+				minDistance = distance;
+				minPosition = dropoff.position;
+			}
+		}
+		return minPosition;
+		
+	}
+
+	public SortedArrayList<Cluster> updateClusters(Player me) {
+		SortedArrayList<Cluster> cells = new SortedArrayList<Cluster>();
+		for (int i = 0; i < this.height; i++) {
+			for (int j = 0; j < this.width; j++) {
+				Position position = new Position(i,j);
+				cells.insertSorted(new Cluster(position, nearestDropPoint(me, position), this));
+			}
+		}
+		SortedArrayList<Cluster> clusters = new SortedArrayList<Cluster>();
+		outer: for (int i = 0; i < GameMap.numberOfClusters; i++) {
+			Cluster cluster = cells.get(i);
+			for (Cluster c: clusters) {
+				for (Position p: c.positions) {
+					if (cluster.positions.contains(p)) {
+						cells.remove(i--);
+						continue outer;
+					}
+				}
+			}
+			clusters.insertSorted(cluster);
+		}
+		return clusters;
 	}
 }

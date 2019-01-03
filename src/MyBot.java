@@ -24,9 +24,12 @@ public class MyBot {
 
 		// THIS IS FOR METHOD 2
 		SortedArrayList<Cluster> clusters = game.gameMap.updateClusters(game.me);
+		for (Cluster c: clusters) {
+			Log.log("Cluster: " + c.center);
+		}
 		HashMap<Ship, Cluster> jobs = new HashMap<Ship, Cluster>();
 
-		game.ready("MyJavaBot");
+		game.ready("New New Bot");
 
 		Log.log("Successfully created bot! My Player ID is " + game.myId + ". Bot rng seed is " + rngSeed + ".");
 		for (;;) {
@@ -38,8 +41,8 @@ public class MyBot {
 			for (Ship ship : me.ships.values()) {
 				if (!jobs.containsKey(ship)) {
 					for (Cluster cluster : clusters) {
-						if (!cluster.hasWorker()) {
-							cluster.setWorker(ship);
+						if (!cluster.hasEnoughWorker()) {
+							cluster.addWorker(ship);
 							jobs.put(ship, cluster);
 							break;
 						}
@@ -48,8 +51,8 @@ public class MyBot {
 				if (jobs.get(ship) == null) {
 					clusters = gameMap.updateClusters(me);
 					for (Cluster cluster : clusters) {
-						if (!cluster.hasWorker()) {
-							cluster.setWorker(ship);
+						if (!cluster.hasEnoughWorker()) {
+							cluster.addWorker(ship);
 							jobs.put(ship, cluster);
 							break;
 						}
@@ -58,35 +61,37 @@ public class MyBot {
 						continue;
 					}
 				}
-				Log.log("Cluster at : " + jobs.get(ship).center);
 				Position nextPosition;
 				if (ship.halite > 900 || ship.isFull()) {
-					nextPosition = me.shipyard.position;
+					nextPosition = gameMap.nearestDropPoint(me, ship.position);
 				} else if (gameMap.at(ship.position).halite > GameMap.stopEating || gameMap.at(ship.position).halite * 0.1 > ship.halite || ship.halite - gameMap.at(ship.position).halite*0.1 <= 900 && ship.halite > 900) {
 					nextPosition = ship.position;
 				} else {
 					nextPosition = jobs.get(ship).getNextPosition(ship, gameMap);
 				}
-				Log.log("Going to " + nextPosition);
-				
 				if (nextPosition == null) {
+					jobs.get(ship).removeWorker(ship);
 					jobs.remove(ship);
-					nextPosition = me.shipyard.position;
+					nextPosition = gameMap.nearestDropPoint(me, ship.position);
+					Direction nextDirection = gameMap.navigate(ship, nextPosition, nextPositions, me.ships.values(), me, game.players);
+					Position adjacentPosition = gameMap.getPositionFromDirection(ship.position, nextDirection);
+					nextPositions.put(ship, adjacentPosition);
+					commandQueue.add(ship.move(nextDirection));
+				} else if (ship.position.equals(jobs.get(ship).center) && jobs.get(ship).isDropPoint(ship) && (me.halite - gameMap.at(ship.position).halite) > 4000) {
+					commandQueue.add(ship.makeDropoff());
+					jobs.remove(ship);
+				} else {
+					Direction nextDirection = gameMap.navigate(ship, nextPosition, nextPositions, me.ships.values(), me, game.players);
+					Position adjacentPosition = gameMap.getPositionFromDirection(ship.position, nextDirection);
+					nextPositions.put(ship, adjacentPosition);
+					commandQueue.add(ship.move(nextDirection));
 				}
-				Direction nextDirection = gameMap.navigate(ship, nextPosition, nextPositions, me.ships.values());
-				Position adjacentPosition = gameMap.getPositionFromDirection(ship.position, nextDirection);
-				nextPositions.put(ship, adjacentPosition);
-				Log.log("Size: " + nextPositions.size());
-				commandQueue.add(ship.move(nextDirection));
 			}
-			String ans = "END: ";
-			for (Ship s: nextPositions.keySet()) ans += s.id.id + " at " + s.position + " going to " + nextPositions.get(s) + ",";
-			Log.log(ans);
 			for (Command c : commandQueue) {
 				Log.log(c.command);
 			}
-//			if (game.turnNumber <= 200 && me.halite / 4 >= Constants.SHIP_COST && !gameMap.at(me.shipyard).isOccupied() || me.ships.size() == 0) {
-			if (me.ships.size() <= 1) {
+			if (game.turnNumber <= 200 && me.halite > 1000 && me.ships.size() < GameMap.numberOfClusters && !gameMap.at(me.shipyard).isOccupied()) {
+//			if (me.ships.size() <= 1 && !gameMap.at(me.shipyard).isOccupied()) {
 				commandQueue.add(me.shipyard.spawn());
 			}
 

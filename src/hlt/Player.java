@@ -40,4 +40,15 @@ public class Player {
 
 		return new Player(playerId, new Shipyard(playerId, new Position(shipyard_x, shipyard_y)));
 	}
+	
+	public boolean equals(Object o) {
+		if (o == null || !(o instanceof Player)) {
+			return false;
+		}
+		return id.id == ((Player) o).id.id;
+	}
+	
+	public int hashCode() {
+		return id.id;
+	}
 }
